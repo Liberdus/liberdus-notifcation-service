@@ -1,0 +1,51 @@
+{
+    "name": "liberdus-notification-service",
+    "version": "1.0.0",
+    "description": "Liberdus notification service for handling push notifications via Expo",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "tsc -p .",
+        "start": "npm run build && node dist/index.js",
+        "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+        "test": "ts-node client/notificationTestClient.ts",
+        "clean:dist": "rimraf dist",
+        "prebuild": "npm run clean:dist",
+        "check": "gts check",
+        "clean": "gts clean",
+        "fix": "gts fix"
+    },
+    "dependencies": {
+        "@shardus/types": "^1.2.21",
+        "axios": "^1.10.0",
+        "cors": "^2.8.5",
+        "expo-server-sdk": "^3.7.0",
+        "express": "^4.18.2",
+        "ws": "^8.18.3"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.30.1",
+        "@types/cors": "^2.8.13",
+        "@types/express": "^4.17.17",
+        "@types/node": "^20.4.2",
+        "@types/ws": "^8.18.1",
+        "eslint": "^8.57.1",
+        "globals": "^16.3.0",
+        "gts": "^6.0.2",
+        "nodemon": "^3.0.1",
+        "prettier": "^3.6.2",
+        "rimraf": "^5.0.1",
+        "ts-node": "^10.9.1",
+        "ts-node-dev": "^2.0.0",
+        "typescript": "^5.1.6",
+        "typescript-eslint": "^8.35.1"
+    },
+    "keywords": [
+        "notifications",
+        "expo",
+        "push-notifications",
+        "liberdus",
+        "typescript"
+    ],
+    "author": "Liberdus Team",
+    "license": "MIT"
+}
