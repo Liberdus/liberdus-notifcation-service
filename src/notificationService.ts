@@ -3,6 +3,7 @@ import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk'
 import cors from 'cors'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { isShardusAddress } from './transformAddress'
 
 // Type definitions
 interface SubscriptionRequest {
@@ -152,6 +153,15 @@ class LiberdusNotificationService {
               error: 'Addresses array is required and must not be empty',
               code: 'MISSING_ADDRESSES',
             })
+          }
+
+          for (const address of addresses) {
+            if (isShardusAddress(address)) {
+              return res.status(400).json({
+                error: 'Invalid address format, expected shardus address',
+                code: 'INVALID_ADDRESS',
+              })
+            }
           }
 
           // Validate Expo push token if provided
