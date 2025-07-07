@@ -156,7 +156,7 @@ class LiberdusNotificationService {
           }
 
           for (const address of addresses) {
-            if (isShardusAddress(address)) {
+            if (!isShardusAddress(address)) {
               return res.status(400).json({
                 error: 'Invalid address format, expected shardus address',
                 code: 'INVALID_ADDRESS',
