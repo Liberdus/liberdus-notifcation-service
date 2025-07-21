@@ -9,11 +9,7 @@ import { isShardusAddress } from './transformAddress'
 interface SubscriptionRequest {
   deviceToken: string
   addresses: string[]
-  expoPushToken?: string
-}
-
-interface UnsubscribeRequest {
-  deviceToken: string
+  expoPushToken: string
 }
 
 interface TestNotificationRequest {
@@ -197,43 +193,6 @@ class LiberdusNotificationService {
       }
     )
 
-    // Unsubscribe endpoint
-    this.app.post(
-      '/unsubscribe',
-      async (
-        req: Request<{}, ApiResponse | ErrorResponse, UnsubscribeRequest>,
-        res: Response<ApiResponse | ErrorResponse>
-      ) => {
-        try {
-          const { deviceToken } = req.body
-
-          if (!deviceToken) {
-            return res.status(400).json({
-              error: 'Device token is required',
-              code: 'MISSING_DEVICE_TOKEN',
-            })
-          }
-
-          await this.removeSubscription(deviceToken)
-
-          res.json({
-            success: true,
-            message: 'Subscription removed successfully',
-            deviceToken,
-            timestamp: new Date().toISOString(),
-          })
-        } catch (error) {
-          console.error('Error processing unsubscription:', error)
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          res.status(500).json({
-            error: 'Internal server error',
-            code: 'UNSUBSCRIPTION_ERROR',
-            message: errorMessage,
-          })
-        }
-      }
-    )
-
     // Get subscription info
     this.app.get(
       '/subscription/:deviceToken',
@@ -339,7 +298,7 @@ class LiberdusNotificationService {
     expoPushToken?: string
   ): Promise<void> {
     // Remove existing subscription if it exists
-    await this.removeSubscription(deviceToken)
+    await this.removeSubscription(deviceToken, addresses, expoPushToken)
 
     // Create new subscription
     const addressSet = new Set(addresses.map((addr) => addr.toLowerCase()))
@@ -349,7 +308,7 @@ class LiberdusNotificationService {
       createdAt: new Date().toISOString(),
     })
 
-    // Update address-to-token mapping
+    // Update address-to-device mapping
     for (const address of addressSet) {
       if (!this.addressToDevices.has(address)) {
         this.addressToDevices.set(address, new Set())
@@ -361,18 +320,52 @@ class LiberdusNotificationService {
     await this.saveSubscriptions()
   }
 
-  private async removeSubscription(deviceToken: string): Promise<void> {
+  private async removeSubscription(
+    deviceToken: string,
+    addresses: string[],
+    expoPushToken: string
+  ): Promise<void> {
+    // If any of the provided addresses already maps to another device with the same Expo push token,
+    // reassign the address to the new deviceToken and remove from old device
+    for (const address of addresses.map((addr) => addr.toLowerCase())) {
+      const existingDevices = this.addressToDevices.get(address)
+      if (existingDevices) {
+        for (const otherDevice of existingDevices) {
+          if (otherDevice !== deviceToken) {
+            const otherSub = this.subscriptions.get(otherDevice)
+            if (otherSub && otherSub.expoPushToken === expoPushToken) {
+              console.log(`Reassigning address ${address} from device ${otherDevice} to ${deviceToken}`)
+
+              // Remove address from old device
+              otherSub.addresses.delete(address)
+
+              // Remove mapping from addressToDevices if no more addresses on old device
+              if (otherSub.addresses.size === 0) {
+                this.subscriptions.delete(otherDevice)
+              }
+
+              // Remove oldDevice from addressToDevices
+              existingDevices.delete(otherDevice)
+              if (existingDevices.size === 0) {
+                this.addressToDevices.delete(address)
+              }
+            }
+          }
+        }
+      }
+    }
+
     const subscription = this.subscriptions.get(deviceToken)
     if (!subscription) {
       return
     }
 
-    // Remove from address-to-token mapping
+    // Remove from address-to-device mapping
     for (const address of subscription.addresses) {
-      const tokenSet = this.addressToDevices.get(address)
-      if (tokenSet) {
-        tokenSet.delete(deviceToken)
-        if (tokenSet.size === 0) {
+      const devices = this.addressToDevices.get(address)
+      if (devices) {
+        devices.delete(deviceToken)
+        if (devices.size === 0) {
           this.addressToDevices.delete(address)
         }
       }
@@ -468,7 +461,7 @@ class LiberdusNotificationService {
         })
       }
 
-      // Rebuild address-to-token mapping
+      // Rebuild address-to-device mapping
       for (const [deviceToken, subscription] of this.subscriptions.entries()) {
         for (const address of subscription.addresses) {
           if (!this.addressToDevices.has(address)) {
