@@ -164,6 +164,7 @@ class LiberdusNotificationService {
           if (addresses.includes(DUMMY_ADDRESS)) {
             // If dummy address is included, remove the subscription of the device
             await this.removeSubscription(deviceToken)
+            console.log(`Subscription removed for device: ${deviceToken}`)
             return res.json({
               success: true,
               message: 'Subscription removed successfully',
