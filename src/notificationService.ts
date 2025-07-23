@@ -160,8 +160,20 @@ class LiberdusNotificationService {
             }
           }
 
+          const DUMMY_ADDRESS = '0'.repeat(64)
+          if (addresses.includes(DUMMY_ADDRESS)) {
+            // If dummy address is included, remove the subscription of the device
+            await this.removeSubscription(deviceToken)
+            return res.json({
+              success: true,
+              message: 'Subscription removed successfully',
+              deviceToken,
+              timestamp: new Date().toISOString(),
+            })
+          }
+
           // Validate Expo push token if provided
-          if (expoPushToken && !Expo.isExpoPushToken(expoPushToken)) {
+          if (!expoPushToken || !Expo.isExpoPushToken(expoPushToken)) {
             return res.status(400).json({
               error: 'Invalid Expo push token format',
               code: 'INVALID_EXPO_TOKEN',
@@ -295,16 +307,19 @@ class LiberdusNotificationService {
   private async addSubscription(
     deviceToken: string,
     addresses: string[],
-    expoPushToken?: string
+    expoPushToken: string
   ): Promise<void> {
+    // If any of the provided addresses already maps to another device with the same Expo push token,
+    // unlink the old devices first
+    this.unlinkOldDevices(deviceToken, addresses, expoPushToken)
     // Remove existing subscription if it exists
-    await this.removeSubscription(deviceToken, addresses, expoPushToken)
+    await this.removeSubscription(deviceToken)
 
     // Create new subscription
     const addressSet = new Set(addresses.map((addr) => addr.toLowerCase()))
     this.subscriptions.set(deviceToken, {
       addresses: addressSet,
-      expoPushToken: expoPushToken || null,
+      expoPushToken,
       createdAt: new Date().toISOString(),
     })
 
@@ -320,13 +335,7 @@ class LiberdusNotificationService {
     await this.saveSubscriptions()
   }
 
-  private async removeSubscription(
-    deviceToken: string,
-    addresses: string[],
-    expoPushToken: string
-  ): Promise<void> {
-    // If any of the provided addresses already maps to another device with the same Expo push token,
-    // reassign the address to the new deviceToken and remove from old device
+  private unlinkOldDevices(deviceToken: string, addresses: string[], expoPushToken: string): void {
     for (const address of addresses.map((addr) => addr.toLowerCase())) {
       const existingDevices = this.addressToDevices.get(address)
       if (existingDevices) {
@@ -354,7 +363,9 @@ class LiberdusNotificationService {
         }
       }
     }
+  }
 
+  private async removeSubscription(deviceToken: string): Promise<void> {
     const subscription = this.subscriptions.get(deviceToken)
     if (!subscription) {
       return
