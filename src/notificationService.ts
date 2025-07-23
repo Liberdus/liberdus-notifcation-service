@@ -144,10 +144,22 @@ class LiberdusNotificationService {
             })
           }
 
-          if (!addresses || !Array.isArray(addresses) || addresses.length === 0) {
+          if (!addresses || !Array.isArray(addresses)) {
             return res.status(400).json({
-              error: 'Addresses array is required and must not be empty',
-              code: 'MISSING_ADDRESSES',
+              error: 'Addresses array is required',
+              code: 'MISSING_ADDRESSES ARRAY',
+            })
+          }
+
+          if (addresses.length === 0) {
+            // If no addresses are provided, remove the subscription of the device
+            await this.removeSubscription(deviceToken)
+            console.log(`Subscription removed for device: ${deviceToken}`)
+            return res.json({
+              success: true,
+              message: 'Subscription removed successfully',
+              deviceToken,
+              timestamp: new Date().toISOString(),
             })
           }
 
@@ -158,19 +170,6 @@ class LiberdusNotificationService {
                 code: 'INVALID_ADDRESS',
               })
             }
-          }
-
-          const DUMMY_ADDRESS = '0'.repeat(64)
-          if (addresses.includes(DUMMY_ADDRESS)) {
-            // If dummy address is included, remove the subscription of the device
-            await this.removeSubscription(deviceToken)
-            console.log(`Subscription removed for device: ${deviceToken}`)
-            return res.json({
-              success: true,
-              message: 'Subscription removed successfully',
-              deviceToken,
-              timestamp: new Date().toISOString(),
-            })
           }
 
           // Validate Expo push token if provided
