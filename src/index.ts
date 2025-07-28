@@ -21,8 +21,8 @@ const start = async (): Promise<void> => {
       host: config.collectorHost.host,
       port: config.collectorHost.port,
       verbose: true,
-      reconnectDelay: 3000,
-      maxReconnectAttempts: 5,
+      reconnectDelay: config.collectorHost.reconnectDelay,
+      maxReconnectAttempts: config.collectorHost.maxReconnectAttempts,
     })
 
     // Register custom data handler
@@ -127,13 +127,6 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
       title = '💳 Payment Received'
       const amount = 'amount' in additionalInfo ? (Number(additionalInfo.amount) / 1e18).toString() : ''
       body = `💰 You received ${amount} LIB from ${toEthereumAddress(from)}.`
-      console.log(
-        additionalInfo,
-        amount,
-        'amount' in additionalInfo && (additionalInfo.amount as bigint) / BigInt(1e18),
-        'amount' in additionalInfo && Number((additionalInfo.amount as bigint) / BigInt(1e18)),
-        'amount' in additionalInfo && Number((additionalInfo.amount as bigint) / BigInt(1e18)).toString()
-      )
     } else {
       // title = 'New Transaction'
       // body = `Transaction from ${from?.substring(0, 8)}...`

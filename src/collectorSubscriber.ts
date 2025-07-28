@@ -61,6 +61,7 @@ export class CollectorSubscriber {
       console.error('WebSocket error:', error)
       if (this.ws) {
         this.ws.close()
+        this.isReconnecting = false
       }
     })
   }
