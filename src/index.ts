@@ -137,6 +137,7 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
     const notificationData: Record<string, any> = {
       type,
       from: toEthereumAddress(from),
+      to: toEthereumAddress(to),
       timestamp: new Date(timestamp).toISOString(),
     }
 
