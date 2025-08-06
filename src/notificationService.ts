@@ -416,6 +416,7 @@ class LiberdusNotificationService {
         title: notification.title,
         body: notification.body,
         data: notification.data || {},
+        badge: 1,
       }
 
       const tickets = await this.expo.sendPushNotificationsAsync([message])
