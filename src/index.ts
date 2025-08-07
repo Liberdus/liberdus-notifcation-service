@@ -122,11 +122,11 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
 
     if (type === 'message') {
       title = '📬 New Message'
-      body = `📧 You have a new message from ${toEthereumAddress(from)}.`
+      body = `📧 You have a new message from ${toEthereumAddress(from)} to ${toEthereumAddress(to)}.`
     } else if (type === 'transfer') {
       title = '💳 Payment Received'
       const amount = 'amount' in additionalInfo ? (Number(additionalInfo.amount) / 1e18).toString() : ''
-      body = `💰 You received ${amount} LIB from ${toEthereumAddress(from)}.`
+      body = `💰 You received ${amount} LIB from ${toEthereumAddress(from)} to ${toEthereumAddress(to)}.`
     } else {
       // title = 'New Transaction'
       // body = `Transaction from ${from?.substring(0, 8)}...`
