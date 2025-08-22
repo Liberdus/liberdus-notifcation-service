@@ -7,7 +7,7 @@
         "build": "tsc -p .",
         "start": "npm run build && node dist/index.js",
         "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-        "test": "ts-node client/notificationTestClient.ts",
+        "test": "ts-node scripts/notificationTestClient.ts",
         "clean:dist": "rimraf dist",
         "prebuild": "npm run clean:dist",
         "check": "gts check",
@@ -20,6 +20,8 @@
         "cors": "^2.8.5",
         "expo-server-sdk": "^3.7.0",
         "express": "^4.18.2",
+        "firebase-admin": "^13.4.0",
+        "node-apn": "^3.0.0",
         "ws": "^8.18.3"
     },
     "devDependencies": {
