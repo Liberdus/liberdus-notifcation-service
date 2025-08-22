@@ -413,10 +413,12 @@ class LiberdusNotificationService {
       const message: ExpoPushMessage = {
         to: subscription.expoPushToken,
         sound: 'default',
+        priority: 'high',
         title: notification.title,
         body: notification.body,
         data: notification.data || {},
         badge: 1,
+        _contentAvailable: true,
       }
 
       const tickets = await this.expo.sendPushNotificationsAsync([message])
