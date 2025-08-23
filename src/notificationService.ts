@@ -4,12 +4,17 @@ import cors from 'cors'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { isShardusAddress } from './transformAddress'
+import admin from 'firebase-admin'
+import * as apn from 'node-apn'
+import { config } from './config'
 
 // Type definitions
 interface SubscriptionRequest {
   deviceToken: string
   addresses: string[]
   expoPushToken: string
+  fcmToken?: string
+  voipToken?: string
 }
 
 interface TestNotificationRequest {
@@ -22,12 +27,16 @@ interface TestNotificationRequest {
 interface Subscription {
   addresses: Set<string>
   expoPushToken: string | null
+  fcmToken: string | null
+  voipToken: string | null
   createdAt: string
 }
 
 interface SubscriptionData {
   addresses: string[]
   expoPushToken: string | null
+  fcmToken: string | null
+  voipToken: string | null
   createdAt: string
 }
 
@@ -91,6 +100,8 @@ class LiberdusNotificationService {
   private subscriptions: Map<string, Subscription>
   private addressToDevices: Map<string, Set<string>>
   private dataFile: string
+  private firebaseApp: admin.app.App | null
+  private apnProvider: apn.Provider | null
 
   constructor() {
     this.app = express()
@@ -98,9 +109,41 @@ class LiberdusNotificationService {
     this.subscriptions = new Map<string, Subscription>()
     this.addressToDevices = new Map<string, Set<string>>()
     this.dataFile = path.resolve(__dirname, '..', 'subscriptions.json')
+    this.firebaseApp = null
+    this.apnProvider = null
+    this.initializeFirebaseAndVoIP()
     this.setupMiddleware()
     this.setupRoutes()
     this.loadSubscriptions()
+  }
+
+  private initializeFirebaseAndVoIP(): void {
+    try {
+      const serviceAccountPath = path.resolve(__dirname, '..', config.firebase.serviceAccountPath)
+      if (admin.apps.length === 0) {
+        this.firebaseApp = admin.initializeApp({
+          credential: admin.credential.cert(require(serviceAccountPath)),
+        })
+        console.log('Firebase Admin SDK initialized successfully')
+      } else {
+        this.firebaseApp = admin.app()
+      }
+
+      const voipKeyPath = path.resolve(__dirname, '..', config.voip.keyPath)
+      this.apnProvider = new apn.Provider({
+        token: {
+          key: voipKeyPath,
+          keyId: config.voip.keyId,
+          teamId: config.voip.teamId,
+        },
+        production: config.voip.production,
+      })
+      console.log('VoIP APN Provider initialized successfully')
+    } catch (error) {
+      console.error('Failed to initialize Firebase/VoIP:', error)
+      this.firebaseApp = null
+      this.apnProvider = null
+    }
   }
 
   private setupMiddleware(): void {
@@ -134,7 +177,7 @@ class LiberdusNotificationService {
         res: Response<ApiResponse | ErrorResponse>
       ) => {
         try {
-          const { deviceToken, addresses, expoPushToken } = req.body
+          const { deviceToken, addresses, expoPushToken, fcmToken, voipToken } = req.body
 
           // Validate required fields
           if (!deviceToken) {
@@ -147,7 +190,7 @@ class LiberdusNotificationService {
           if (!addresses || !Array.isArray(addresses)) {
             return res.status(400).json({
               error: 'Addresses array is required',
-              code: 'MISSING_ADDRESSES ARRAY',
+              code: 'MISSING_ADDRESSES_ARRAY',
             })
           }
 
@@ -180,8 +223,10 @@ class LiberdusNotificationService {
             })
           }
 
+          // [TODO] Validate the fcm and voip tokens if provided
+
           // Process subscription
-          await this.addSubscription(deviceToken, addresses, expoPushToken)
+          await this.addSubscription(deviceToken, addresses, expoPushToken, fcmToken, voipToken)
 
           console.log(`Subscription added for device: ${deviceToken}`)
           console.log(`Monitoring addresses: ${addresses.join(', ')}`)
@@ -307,11 +352,13 @@ class LiberdusNotificationService {
   private async addSubscription(
     deviceToken: string,
     addresses: string[],
-    expoPushToken: string
+    expoPushToken: string,
+    fcmToken: string | null,
+    voipToken: string | null
   ): Promise<void> {
-    // If any of the provided addresses already maps to another device with the same Expo push token,
+    // If any of the provided addresses already maps to another device with the same tokens,
     // unlink the old devices first
-    this.unlinkOldDevices(deviceToken, addresses, expoPushToken)
+    this.unlinkOldDevices(deviceToken, addresses, expoPushToken, fcmToken, voipToken)
     // Remove existing subscription if it exists
     await this.removeSubscription(deviceToken)
 
@@ -320,6 +367,8 @@ class LiberdusNotificationService {
     this.subscriptions.set(deviceToken, {
       addresses: addressSet,
       expoPushToken,
+      fcmToken,
+      voipToken,
       createdAt: new Date().toISOString(),
     })
 
@@ -335,14 +384,25 @@ class LiberdusNotificationService {
     await this.saveSubscriptions()
   }
 
-  private unlinkOldDevices(deviceToken: string, addresses: string[], expoPushToken: string): void {
+  private unlinkOldDevices(
+    deviceToken: string,
+    addresses: string[],
+    expoPushToken: string,
+    fcmToken: string | null,
+    voipToken: string | null
+  ): void {
     for (const address of addresses.map((addr) => addr.toLowerCase())) {
       const existingDevices = this.addressToDevices.get(address)
       if (existingDevices) {
         for (const otherDevice of existingDevices) {
           if (otherDevice !== deviceToken) {
             const otherSub = this.subscriptions.get(otherDevice)
-            if (otherSub && otherSub.expoPushToken === expoPushToken) {
+            if (
+              otherSub &&
+              (otherSub.expoPushToken === expoPushToken ||
+                (fcmToken && otherSub.fcmToken === fcmToken) ||
+                (voipToken && otherSub.voipToken === voipToken))
+            ) {
               console.log(`Reassigning address ${address} from device ${otherDevice} to ${deviceToken}`)
 
               // Remove address from old device
@@ -396,7 +456,8 @@ class LiberdusNotificationService {
 
   public async sendNotification(
     deviceToken: string,
-    notification: NotificationPayload
+    notification: NotificationPayload,
+    sendCallNotification = false
   ): Promise<NotificationResult> {
     try {
       const subscription = this.subscriptions.get(deviceToken)
@@ -410,6 +471,24 @@ class LiberdusNotificationService {
         return { success: false, error: 'No Expo push token' }
       }
 
+      const results: { type: string; success: boolean; error?: string }[] = []
+
+      // If this is a call notification, try FCM and VoIP first
+      if (sendCallNotification === true) {
+        // Try FCM for call notifications
+        if (subscription.fcmToken) {
+          const fcmResult = await this.sendFCMNotification(deviceToken, notification)
+          results.push({ type: 'FCM', success: fcmResult.success, error: fcmResult.error })
+        }
+
+        // Try VoIP for call notifications
+        if (subscription.voipToken) {
+          const voipResult = await this.sendVoIPNotification(deviceToken, notification)
+          results.push({ type: 'VoIP', success: voipResult.success, error: voipResult.error })
+        }
+      }
+
+      // Always also send Expo push notification
       const message: ExpoPushMessage = {
         to: subscription.expoPushToken,
         sound: 'default',
@@ -424,20 +503,128 @@ class LiberdusNotificationService {
       const tickets = await this.expo.sendPushNotificationsAsync([message])
 
       if (tickets.length === 0) {
-        console.warn(`No tickets returned for device: ${deviceToken}`)
-        return { success: false, error: 'No tickets returned' }
+        results.push({ type: 'Expo', success: false, error: 'No tickets returned' })
+      } else if (tickets[0].status === 'error') {
+        results.push({ type: 'Expo', success: false, error: tickets[0].message || 'Unknown error' })
+      } else {
+        results.push({ type: 'Expo', success: true })
+        console.log(`Expo notification sent to device ${deviceToken}:`, tickets)
       }
 
-      if (tickets[0].status === 'error') {
-        console.error(`Error sending notification to device ${deviceToken}:`, tickets[0].message)
-        return { success: false, error: tickets[0].message || 'Unknown error' }
+      // Check if at least one notification succeeded
+      const hasSuccess = results.some((r) => r.success)
+      const errors = results
+        .filter((r) => !r.success)
+        .map((r) => `${r.type}: ${r.error}`)
+        .join(', ')
+
+      if (hasSuccess) {
+        const successTypes = results
+          .filter((r) => r.success)
+          .map((r) => r.type)
+          .join(', ')
+        console.log(`Notifications sent via ${successTypes} to device ${deviceToken}`)
+        return { success: true }
+      } else {
+        console.error(`All notification methods failed for device ${deviceToken}: ${errors}`)
+        return { success: false, error: errors || 'All notification methods failed' }
       }
-
-      console.log(`Notification sent to device ${deviceToken}:`, tickets)
-
-      return { success: true, ticket: tickets[0] }
     } catch (error) {
       console.error(`Error sending notification to device ${deviceToken}:`, error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  private async sendFCMNotification(
+    deviceToken: string,
+    notification: NotificationPayload
+  ): Promise<NotificationResult> {
+    try {
+      const subscription = this.subscriptions.get(deviceToken)
+      if (!subscription?.fcmToken) {
+        return { success: false, error: 'No FCM token' }
+      }
+
+      if (!this.firebaseApp) {
+        return { success: false, error: 'Firebase not initialized' }
+      }
+
+      const message = {
+        token: subscription.fcmToken,
+        data: {
+          type: 'incoming_call',
+          callId: `call_${Date.now()}`,
+          callerName: 'Liberdus',
+          callType: 'audio',
+          sentAt: new Date().toISOString(),
+        },
+        android: {
+          priority: 'high' as const,
+        },
+        apns: {
+          headers: { 'apns-push-type': 'voip', 'apns-priority': '10' },
+          payload: {
+            aps: {
+              'content-available': 1,
+            },
+            callId: `call_${Date.now()}`,
+            callerName: 'Liberdus',
+          },
+        },
+      }
+
+      const response = await this.firebaseApp.messaging().send(message)
+      console.log(`FCM call notification sent to device ${deviceToken}, messageId: ${response}`)
+      return { success: true }
+    } catch (error) {
+      console.error(`Error sending FCM notification to device ${deviceToken}:`, error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  private async sendVoIPNotification(
+    deviceToken: string,
+    notification: NotificationPayload
+  ): Promise<NotificationResult> {
+    try {
+      const subscription = this.subscriptions.get(deviceToken)
+      if (!subscription?.voipToken) {
+        return { success: false, error: 'No VoIP token' }
+      }
+
+      if (!this.apnProvider) {
+        return { success: false, error: 'VoIP provider not initialized' }
+      }
+
+      const voipNotification = new apn.Notification()
+      voipNotification.topic = config.voip.bundleId
+      voipNotification.pushType = 'voip'
+      voipNotification.payload = {
+        aps: {
+          alert: { title: notification.title, body: notification.body },
+          sound: 'default',
+          'content-available': 1,
+        },
+        callId: `call_${Date.now()}`,
+        callerName: 'Liberdus',
+        callType: notification.data?.callType || 'audio',
+      }
+      voipNotification.expiry = Math.floor(Date.now() / 1000) + 3600
+
+      const result = await this.apnProvider.send(voipNotification, subscription.voipToken)
+
+      if (result.failed && result.failed.length > 0) {
+        const error = result.failed[0].error || result.failed[0].status
+        console.error(`VoIP notification failed: ${error}`)
+        return { success: false, error: error.toString() }
+      }
+
+      console.log(`VoIP notification sent to device ${deviceToken}`)
+      return { success: true }
+    } catch (error) {
+      console.error(`Error sending VoIP notification to device ${deviceToken}:`, error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       return { success: false, error: errorMessage }
     }
@@ -471,6 +658,8 @@ class LiberdusNotificationService {
         this.subscriptions.set(deviceToken, {
           addresses: new Set(subscription.addresses),
           expoPushToken: subscription.expoPushToken,
+          fcmToken: subscription.fcmToken || null,
+          voipToken: subscription.voipToken || null,
           createdAt: subscription.createdAt,
         })
       }
@@ -506,6 +695,8 @@ class LiberdusNotificationService {
         data.subscriptions[deviceToken] = {
           addresses: Array.from(subscription.addresses),
           expoPushToken: subscription.expoPushToken,
+          fcmToken: subscription.fcmToken,
+          voipToken: subscription.voipToken,
           createdAt: subscription.createdAt,
         }
       }
