@@ -2,12 +2,13 @@
 
 import admin from 'firebase-admin'
 import * as apn from 'node-apn'
+import path from 'path'
 
 // ---------- CONFIG ----------
 // Path to your Firebase service account JSON
-const FIREBASE_SERVICE_ACCOUNT = './service-account.json'
+const FIREBASE_SERVICE_ACCOUNT = path.resolve(__dirname, '../auth/service-account.json')
 
-const VOIP_KEY_PATH = './AuthKey_XXX.p8' // your downloaded Push Notification  .p8 file
+const VOIP_KEY_PATH = './auth/AuthKey_XXX.p8' // your downloaded Push Notification  .p8 file
 const VOIP_KEY_ID = 'XXX' // Key ID from Apple Developer
 const VOIP_TEAM_ID = 'XXX' // Team ID from Apple Developer
 const VOIP_BUNDLE_ID = 'XXX' // App bundle ID for VoIP

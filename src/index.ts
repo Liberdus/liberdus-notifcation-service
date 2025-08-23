@@ -119,6 +119,7 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
 
     let title: string
     let body: string
+    let sendCallNotification = false
 
     if (type === 'message') {
       title = '📬 New Message'
@@ -127,6 +128,9 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
       title = '💳 Payment Received'
       const amount = 'amount' in additionalInfo ? (Number(additionalInfo.amount) / 1e18).toString() : ''
       body = `💰 You received ${amount} LIB from ${toEthereumAddress(from)} to ${toEthereumAddress(to)}`
+      if (additionalInfo && 'callType' in additionalInfo && additionalInfo.callType === 'call') {
+        sendCallNotification = true
+      }
     } else {
       // title = 'New Transaction'
       // body = `Transaction from ${from?.substring(0, 8)}...`
@@ -147,12 +151,12 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
         title,
         body,
         data: notificationData,
-      })
+      }, sendCallNotification)
     )
 
     await Promise.all(notifications)
 
-    console.log(`Sent ${notifications.length} notifications for transaction to ${toEthereumAddress(to)}`)
+    console.log(`Sent ${notifications.length} notifications for ${type} to ${toEthereumAddress(to)}`)
   } catch (error) {
     console.error('Error processing transaction for notifications:', error)
   }
