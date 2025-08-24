@@ -12,6 +12,7 @@ interface SubscriberConfig {
   reconnectDelay: number
   maxReconnectAttempts: number
   verbose: boolean
+  subscriptionTypes: string[]
 }
 
 export class CollectorSubscriber {
@@ -20,6 +21,7 @@ export class CollectorSubscriber {
   private isReconnecting = false
   private config: SubscriberConfig
   private dataHandler: ((message: WebSocketMessage) => void) | null = null
+  private subscriptionTypes: string[] = []
 
   constructor(config: Partial<SubscriberConfig> = {}) {
     this.config = {
@@ -28,14 +30,17 @@ export class CollectorSubscriber {
       reconnectDelay: config.reconnectDelay || 5000,
       maxReconnectAttempts: config.maxReconnectAttempts || 10,
       verbose: config.verbose || config.verbose || false,
+      subscriptionTypes: config.subscriptionTypes || [],
     }
   }
 
   public connect(): void {
-    const url = `ws://${this.config.host}:${this.config.port}`
+    let url = `ws://${this.config.host}:${this.config.port}`
 
-    if (this.config.verbose) {
-      console.log(`Connecting to collector server at ${url}`)
+    if (this.subscriptionTypes.length > 1) {
+      const params = new URLSearchParams()
+      params.set('subscriptions', JSON.stringify(this.subscriptionTypes))
+      url += `?${params.toString()}`
     }
 
     this.ws = new WebSocket(url)

@@ -32,12 +32,8 @@ interface Subscription {
   createdAt: string
 }
 
-interface SubscriptionData {
+interface SubscriptionData extends Omit<Subscription, 'addresses'> {
   addresses: string[]
-  expoPushToken: string | null
-  fcmToken: string | null
-  voipToken: string | null
-  createdAt: string
 }
 
 interface SavedSubscriptions {
@@ -177,6 +173,7 @@ class LiberdusNotificationService {
         res: Response<ApiResponse | ErrorResponse>
       ) => {
         try {
+          console.log(`Received subscription request, body: ${JSON.stringify(req.body)}`)
           const { deviceToken, addresses, expoPushToken, fcmToken, voipToken } = req.body
 
           // Validate required fields
@@ -473,18 +470,25 @@ class LiberdusNotificationService {
 
       const results: { type: string; success: boolean; error?: string }[] = []
 
+      console.log(
+        `Subscription for device ${deviceToken}, sendCallNotification: ${sendCallNotification}:`,
+        subscription
+      )
+
       // If this is a call notification, try FCM and VoIP first
       if (sendCallNotification === true) {
         // Try FCM for call notifications
         if (subscription.fcmToken) {
           const fcmResult = await this.sendFCMNotification(deviceToken, notification)
           results.push({ type: 'FCM', success: fcmResult.success, error: fcmResult.error })
+          console.log(`FCM notification result for device ${deviceToken}:`, fcmResult)
         }
 
         // Try VoIP for call notifications
         if (subscription.voipToken) {
           const voipResult = await this.sendVoIPNotification(deviceToken, notification)
           results.push({ type: 'VoIP', success: voipResult.success, error: voipResult.error })
+          console.log(`VoIP notification result for device ${deviceToken}:`, voipResult)
         }
       }
 
