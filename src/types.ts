@@ -16,6 +16,20 @@ export enum AccountType {
   UserAccount = 'UserAccount',
 }
 
+export interface Transaction {
+  txId: string
+  appReceiptId?: string // Dapp receipt id (eg. txhash for the EVM receipt in shardeum)
+  timestamp: number
+  cycleNumber: number
+  data: any & { txId?: string; appReceiptId?: string }
+  originalTxData: unknown & { tx: any } // eslint-disable-line @typescript-eslint/no-explicit-any
+  transactionType?: TransactionType
+  txFrom?: string
+  txTo?: string
+}
+
+export enum TransactionType {}
+
 export interface AppReceiptData {
   txId: string
   timestamp: number

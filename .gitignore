@@ -22,6 +22,8 @@ Thumbs.db
 coverage/
 dist/
 build/
+*.patch
+
 
 subscriptions.json
 

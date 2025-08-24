@@ -14,6 +14,16 @@ const VOIP_TEAM_ID = 'XXX' // Team ID from Apple Developer
 const VOIP_BUNDLE_ID = 'XXX' // App bundle ID for VoIP
 const VOIP_PRODUCTION = false // set to true for production
 
+// Example usage:
+// # Firebase push
+// ts-node notiSender.ts <fcmToken> push "Test Title" "Test Body"
+
+// # Firebase Call push
+// ts-node notiSender.ts <fcmToken> call "Test Caller"
+
+// # VoIP push
+// ts-node auth/notiSender.ts <voipToken> voip "Incoming Call" "Test call from server"
+
 // Initialize Firebase
 if (!admin.apps.length) {
   admin.initializeApp({

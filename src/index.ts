@@ -1,11 +1,12 @@
 import { Utils as StringUtils } from '@shardus/types'
 import CollectorSubscriber from './collectorSubscriber'
 import NotificationService from './notificationService'
-import { Account, AppReceiptData } from './types'
+import { AppReceiptData, Transaction } from './types'
 import { config } from './config'
 import { toEthereumAddress } from './transformAddress'
 
 export const AppReceiptDataWsEvent = '/data/appReceipt'
+export const TransactionDataWsEvent = '/data/transaction'
 
 let notificationService: NotificationService
 
@@ -23,6 +24,7 @@ const start = async (): Promise<void> => {
       verbose: true,
       reconnectDelay: config.collectorHost.reconnectDelay,
       maxReconnectAttempts: config.collectorHost.maxReconnectAttempts,
+      subscriptionTypes: [TransactionDataWsEvent],
     })
 
     // Register custom data handler
@@ -30,14 +32,12 @@ const start = async (): Promise<void> => {
       //  console.log('Received data:', message)
       // Add your logic here to process `message.data`
 
-      if (message.event === AppReceiptDataWsEvent) {
+      if (message.event === AppReceiptDataWsEvent || message.event === TransactionDataWsEvent) {
         try {
-          // const accountData: Account = StringUtils.safeJsonParse(message.data)
-          // processAccountData(accountData)
-          const appReceipt: AppReceiptData = StringUtils.safeJsonParse(message.data)
-          processAppReceiptData(appReceipt)
+          const data = StringUtils.safeJsonParse(message.data)
+          processTransactionReceiptData(data)
         } catch (error) {
-          console.error('Error processing account data:', error)
+          console.error('Error processing ${message.event} :', error)
         }
       } else {
         console.log(`Received unknown event: ${message.event}`)
@@ -66,47 +66,13 @@ const start = async (): Promise<void> => {
   }
 }
 
-const processAccountData = async (account: Account): Promise<void> => {
-  console.log('Received account data:', {
-    accountId: account.accountId,
-    timestamp: account.timestamp,
-    // Add other relevant account fields you want to log
-  })
-
-  const { accountId, timestamp } = account
-
-  const deviceTokens = notificationService.getDevicesForAddress(accountId)
-
-  if (!deviceTokens || deviceTokens.size === 0) {
-    return
-  }
-
-  const notificationData: Record<string, any> = {
-    type: 'transaction',
-    to: toEthereumAddress(accountId),
-    timestamp,
-  }
-
-  let title = ''
-  let body = `Transaction to ${accountId}...`
-
-  // Send notifications to all subscribed devices
-  const notifications = Array.from(deviceTokens).map((deviceToken) =>
-    notificationService.sendNotification(deviceToken, {
-      title,
-      body,
-      data: notificationData,
-    })
-  )
-
-  await Promise.all(notifications)
-
-  console.log(`Sent ${notifications.length} notifications for transaction to ${accountId}`)
-}
-
-const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> => {
-  // This method will be called by the collector when processing transactions
+const processTransactionReceiptData = async (data: Transaction | AppReceiptData): Promise<void> => {
   try {
+    const appReceipt = (data as Transaction).data || (data as AppReceiptData)
+    if (!appReceipt) {
+      console.error('Error processing data: appReceipt not found')
+      return
+    }
     const { to, type, from, timestamp, success, additionalInfo } = appReceipt
     if (!success) {
       return
@@ -124,13 +90,17 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
     if (type === 'message') {
       title = '📬 New Message'
       body = `📧 You have a new message from ${toEthereumAddress(from)} to ${toEthereumAddress(to)}`
+      // If it's the transaction data, check if it's a callType from originalTxData
+      if ((data as Transaction).originalTxData) {
+        const originalTxData = (data as Transaction).originalTxData?.tx
+        if (originalTxData && 'callType' in originalTxData && originalTxData.callType === true) {
+          sendCallNotification = true
+        }
+      }
     } else if (type === 'transfer') {
       title = '💳 Payment Received'
       const amount = 'amount' in additionalInfo ? (Number(additionalInfo.amount) / 1e18).toString() : ''
       body = `💰 You received ${amount} LIB from ${toEthereumAddress(from)} to ${toEthereumAddress(to)}`
-      if (additionalInfo && 'callType' in additionalInfo && additionalInfo.callType === 'call') {
-        sendCallNotification = true
-      }
     } else {
       // title = 'New Transaction'
       // body = `Transaction from ${from?.substring(0, 8)}...`
@@ -147,11 +117,15 @@ const processAppReceiptData = async (appReceipt: AppReceiptData): Promise<void> 
 
     // Send notifications to all subscribed devices
     const notifications = Array.from(deviceTokens).map((deviceToken) =>
-      notificationService.sendNotification(deviceToken, {
-        title,
-        body,
-        data: notificationData,
-      }, sendCallNotification)
+      notificationService.sendNotification(
+        deviceToken,
+        {
+          title,
+          body,
+          data: notificationData,
+        },
+        sendCallNotification
+      )
     )
 
     await Promise.all(notifications)
