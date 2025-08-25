@@ -364,8 +364,8 @@ class LiberdusNotificationService {
     this.subscriptions.set(deviceToken, {
       addresses: addressSet,
       expoPushToken,
-      fcmToken,
-      voipToken,
+      ...(fcmToken && { fcmToken }),
+      ...(voipToken && { voipToken }),
       createdAt: new Date().toISOString(),
     })
 
@@ -662,8 +662,8 @@ class LiberdusNotificationService {
         this.subscriptions.set(deviceToken, {
           addresses: new Set(subscription.addresses),
           expoPushToken: subscription.expoPushToken,
-          fcmToken: subscription.fcmToken || null,
-          voipToken: subscription.voipToken || null,
+          ...(subscription.fcmToken && { fcmToken: subscription.fcmToken }),
+          ...(subscription.voipToken && { voipToken: subscription.voipToken }),
           createdAt: subscription.createdAt,
         })
       }
@@ -699,8 +699,8 @@ class LiberdusNotificationService {
         data.subscriptions[deviceToken] = {
           addresses: Array.from(subscription.addresses),
           expoPushToken: subscription.expoPushToken,
-          fcmToken: subscription.fcmToken,
-          voipToken: subscription.voipToken,
+          ...(subscription.fcmToken && { fcmToken: subscription.fcmToken }),
+          ...(subscription.voipToken && { voipToken: subscription.voipToken }),
           createdAt: subscription.createdAt,
         }
       }
