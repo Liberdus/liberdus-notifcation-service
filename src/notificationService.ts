@@ -7,6 +7,7 @@ import { isShardusAddress } from './transformAddress'
 import admin from 'firebase-admin'
 import * as apn from 'node-apn'
 import { config } from './config'
+import { v4 as uuidv4 } from 'uuid'
 
 // Type definitions
 interface SubscriptionRequest {
@@ -558,7 +559,7 @@ class LiberdusNotificationService {
         token: subscription.fcmToken,
         data: {
           type: 'incoming_call',
-          callId: `call_${Date.now()}`,
+          callId: uuidv4(),
           callerName: 'Liberdus',
           callType: 'audio',
           sentAt: new Date().toISOString(),
@@ -572,7 +573,7 @@ class LiberdusNotificationService {
             aps: {
               'content-available': 1,
             },
-            callId: `call_${Date.now()}`,
+            callId: uuidv4(),
             callerName: 'Liberdus',
           },
         },
@@ -611,7 +612,7 @@ class LiberdusNotificationService {
           sound: 'default',
           'content-available': 1,
         },
-        callId: `call_${Date.now()}`,
+        callId: uuidv4(),
         callerName: 'Liberdus',
         callType: notification.data?.callType || 'audio',
       }
