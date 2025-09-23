@@ -3,6 +3,7 @@
 import admin from 'firebase-admin'
 import * as apn from 'node-apn'
 import path from 'path'
+import { v4 as uuidv4 } from 'uuid'
 
 // ---------- CONFIG ----------
 // Path to your Firebase service account JSON
@@ -48,7 +49,8 @@ async function sendPush(fcmToken: string, title: string, body: string) {
 }
 
 async function sendCall(fcmToken: string, callerName: string) {
-  const callId = `call_${Date.now()}`
+  const callId: string = uuidv4()
+  const sentAt = new Date().toISOString()
   const message = {
     token: fcmToken,
     data: {
@@ -56,21 +58,25 @@ async function sendCall(fcmToken: string, callerName: string) {
       callId,
       callerName,
       callType: 'audio',
-      sentAt: new Date().toISOString(),
+      sentAt,
     },
     android: {
       priority: 'high' as const,
     },
-    apns: {
-      headers: { 'apns-push-type': 'voip', 'apns-priority': '10' },
-      payload: {
-        aps: {
-          'content-available': 1,
-        },
-        callId,
-        callerName,
-      },
-    },
+    // iOS-specific configuration
+    // apns: {
+    //   headers: { 'apns-push-type': 'voip', 'apns-priority': '10' },
+    //   payload: {
+    //     aps: {
+    //       'content-available': 1,
+    //     },
+    //     type: 'incoming_call',
+    //     callId,
+    //     callerName: 'Liberdus',
+    //     callType: 'audio',
+    //     sentAt,
+    //   },
+    // },
   }
   return admin.messaging().send(message)
 }
@@ -81,6 +87,9 @@ async function sendVoip(voipToken: string, title: string, body: string) {
     production: VOIP_PRODUCTION,
   })
 
+  const callId: string = uuidv4()
+  const sentAt = new Date().toISOString()
+
   const note = new apn.Notification()
   note.topic = VOIP_BUNDLE_ID
   note.pushType = 'voip'
@@ -89,10 +98,13 @@ async function sendVoip(voipToken: string, title: string, body: string) {
       alert: { title, body },
       sound: 'default',
       'content-available': 1,
+      badge: 1,
     },
-    callId: `call_${Date.now()}`,
+    type: 'incoming_call',
+    callId,
     callerName: 'Liberdus',
     callType: 'audio',
+    sentAt,
   }
   note.expiry = Math.floor(Date.now() / 1000) + 3600
 

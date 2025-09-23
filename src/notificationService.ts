@@ -555,28 +555,35 @@ class LiberdusNotificationService {
         return { success: false, error: 'Firebase not initialized' }
       }
 
+      const callId: string = uuidv4()
+      const sentAt = new Date().toISOString()
+
       const message = {
         token: subscription.fcmToken,
         data: {
           type: 'incoming_call',
-          callId: uuidv4(),
+          callId,
           callerName: 'Liberdus',
           callType: 'audio',
-          sentAt: new Date().toISOString(),
+          sentAt,
         },
         android: {
           priority: 'high' as const,
         },
-        apns: {
-          headers: { 'apns-push-type': 'voip', 'apns-priority': '10' },
-          payload: {
-            aps: {
-              'content-available': 1,
-            },
-            callId: uuidv4(),
-            callerName: 'Liberdus',
-          },
-        },
+        // iOS-specific configuration
+        // apns: {
+        //   headers: { 'apns-push-type': 'voip', 'apns-priority': '10' },
+        //   payload: {
+        //     aps: {
+        //       'content-available': 1,
+        //     },
+        //     type: 'incoming_call',
+        //     callId,
+        //     callerName: 'Liberdus',
+        //     callType: 'audio',
+        //     sentAt,
+        //   },
+        // },
       }
 
       const response = await this.firebaseApp.messaging().send(message)
@@ -603,6 +610,9 @@ class LiberdusNotificationService {
         return { success: false, error: 'VoIP provider not initialized' }
       }
 
+      const callId: string = uuidv4()
+      const sentAt = new Date().toISOString()
+
       const voipNotification = new apn.Notification()
       voipNotification.topic = config.voip.bundleId
       voipNotification.pushType = 'voip'
@@ -612,9 +622,10 @@ class LiberdusNotificationService {
           sound: 'default',
           'content-available': 1,
         },
-        callId: uuidv4(),
+        callId,
         callerName: 'Liberdus',
-        callType: notification.data?.callType || 'audio',
+        callType: 'audio',
+        sentAt,
       }
       voipNotification.expiry = Math.floor(Date.now() / 1000) + 3600
 
