@@ -37,7 +37,7 @@ const config: Config = {
     keyId: 'XXX',
     teamId: 'XXX',
     bundleId: 'XXX',
-    production: false,
+    production: true, // Make sure to set this to false in iOS development build
   },
 }
 
