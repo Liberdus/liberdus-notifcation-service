@@ -21,7 +21,6 @@ export class CollectorSubscriber {
   private isReconnecting = false
   private config: SubscriberConfig
   private dataHandler: ((message: WebSocketMessage) => void) | null = null
-  private subscriptionTypes: string[] = []
 
   constructor(config: Partial<SubscriberConfig> = {}) {
     this.config = {
@@ -37,11 +36,13 @@ export class CollectorSubscriber {
   public connect(): void {
     let url = `ws://${this.config.host}:${this.config.port}`
 
-    if (this.subscriptionTypes.length > 1) {
+    if (this.config.subscriptionTypes.length > 0) {
       const params = new URLSearchParams()
-      params.set('subscriptions', JSON.stringify(this.subscriptionTypes))
+      params.set('subscriptions', JSON.stringify(this.config.subscriptionTypes))
       url += `?${params.toString()}`
     }
+
+    console.log('Connecting to collector server at ', url)
 
     this.ws = new WebSocket(url)
 
